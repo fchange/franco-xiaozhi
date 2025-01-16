@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Audio Client</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+</head>
+<body>
+    <div id="app">
+        <h1>WebSocket Audio Client</h1>
+        <button @click="connectWebSocket">连接 WebSocket</button>
+        <button @click="startRecording" :disabled="!isConnected || isRecording">开始录音</button>
+        <button @click="stopRecording" :disabled="!isRecording">结束录音</button>
+        <button @click="sendAudio" :disabled="!audioChunks.length">发送音频</button>
+        <p>状态: {{ status }}</p>
+        <p>识别结果: {{ result }}</p>
+    </dmiv>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    websocket: null,
+                    mediaRecorder: null,
+                    audioChunks: [],
+                    isConnected: false,
+                    isRecording: false,
+                    status: '未连接',
+                    result: ''
+                };
+            },
+            methods: {
+                async startRecording() {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    this.mediaRecorder = new MediaRecorder(stream);
+                    this.mediaRecorder.ondataavailable = (event) => {
+                        this.audioChunks.push(event.data);
+                    };
+                    this.mediaRecorder.start();
+                    this.isRecording = true;
+                },
+                stopRecording() {
+                    this.mediaRecorder.stop();
+                    this.isRecording = false;
+                },
+                sendAudio() {
+                    const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
+                    this.websocket.send(audioBlob);
+                    this.audioChunks = [];
+                },
+                connectWebSocket() {
+                    this.websocket = new WebSocket('ws://localhost:8765');
+                    this.websocket.onopen = () => {
+                        this.status = '已连接';
+                        this.isConnected = true;
+                    };
+                    this.websocket.onmessage = (event) => {
+                        this.result = `识别结果: ${event.data}`;
+                    };
+                    this.websocket.onclose = () => {
+                        this.status = '已断开';
+                        this.isConnected = false;
+                    };
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
