@@ -1,7 +1,7 @@
 from time import perf_counter
 import logging
 from typing import Any, Generator
-from queue import Queue
+from queue import Queue, Empty
 from threading import Event
 
 logger = logging.getLogger(__name__)
@@ -54,33 +54,40 @@ class BaseHandler:
 
     def run(self) -> None:
         """运行处理器"""
+        logger.info(f"Starting {self.__class__.__name__}")
         while not self.stop_event.is_set():
             # 从所有输入队列获取数据
             for queue in self.input_queues:
                 try:
                     input_data = queue.get(timeout=0.1)  # 100ms超时
                     if isinstance(input_data, bytes) and input_data == b"END":
-                        logger.debug(f"{self.__class__.__name__}: 收到停止信号")
+                        logger.info(f"{self.__class__.__name__}: 收到停止信号")
                         return
-                        
+                    
+                    # logger.debug(f"{self.__class__.__name__}: Processing data of size {len(input_data)} bytes")
                     start_time = perf_counter()
                     for output in self.process(input_data):
                         self._times.append(perf_counter() - start_time)
                         if self.last_time > self.min_time_to_debug:
-                            logger.debug(f"{self.__class__.__name__}: {self.last_time:.3f} s")
+                            logger.info(f"{self.__class__.__name__}: Processing took {self.last_time:.3f} s")
                             
                         # 将输出发送到所有输出队列
                         for out_queue in self.output_queues:
                             out_queue.put(output)
+                            logger.debug(f"{self.__class__.__name__}: Sent output of size {len(output)} bytes")
                             
                         start_time = perf_counter()
-                except Exception:
+                except Empty:
                     continue
+                except Exception as e:
+                    logger.error(f"Error in {self.__class__.__name__}: {e}", exc_info=True)
 
+        logger.info(f"Stopping {self.__class__.__name__}")
         self.cleanup()
         # 向所有输出队列发送结束信号
         for queue in self.output_queues:
             queue.put(b"END")
+            logger.debug(f"{self.__class__.__name__}: Sent END signal")
 
     @property
     def last_time(self) -> float:

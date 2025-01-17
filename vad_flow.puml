@@ -1,0 +1,56 @@
+@startuml
+
+title VADHandler 处理流程
+
+start
+
+:接收音频数据块(bytes);
+
+if (是否正在监听?) then (否)
+    stop
+endif
+
+:将音频数据转换为float32格式\n并归一化到[-1,1];
+
+:将新数据添加到累积缓冲区;
+
+while (累积数据长度 >= chunk_stride) is (是)
+    :提取当前chunk;
+    :更新累积缓冲区;
+    
+    :获取VAD输出;
+    
+    if (检测到语音?) then (是)
+        if (当前未在说话状态?) then (是)
+            :设置说话状态为true;
+            :初始化语音帧列表;
+            :记录开始时间;
+        else (否)
+            :添加当前帧到语音帧列表;
+            :计算当前语音时长;
+            
+            if (超过最大时长?) then (是)
+                :结束语音片段;
+                note right: 重置状态\n清空缓存
+                continue
+            endif
+            
+            if (VAD输出为空?) then (是)
+                if (语音时长 < 最小时长?) then (是)
+                    :丢弃语音片段;
+                    :结束语音片段;
+                    continue
+                endif
+                
+                :合并所有语音帧;
+                :转换为int16格式;
+                :输出音频数据;
+                :结束语音片段;
+            endif
+        endif
+    endif
+endwhile
+
+stop
+
+@enduml 

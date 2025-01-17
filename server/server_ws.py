@@ -1,3 +1,15 @@
+import logging
+
+# 设置日志配置
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),  # 输出到控制台
+        logging.FileHandler('server.log')  # 同时保存到文件
+    ]
+)
+
 import os
 import sys
 
@@ -5,7 +17,6 @@ import sys
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(ROOT_DIR)
 
-import logging
 import socket
 from threading import Thread, Event
 from queue import Queue
@@ -38,16 +49,15 @@ def create_handlers(pipeline: PipelineManager, args: argparse.Namespace) -> List
     )
     handlers.append(receiver)
     
-    # 2. 创建音频保存处理器
-    audio_saver = AudioSaverHandler(stop_event=pipeline.states.stop_event)
-    audio_saver.add_input_queue(pipeline.queues.recv_audio_chunks_queue)
-    audio_saver.add_output_queue(pipeline.queues.spoken_prompt_queue)  # 用于调试
-    audio_saver.setup(
+    # 2. 创建原始音频保存处理器
+    raw_audio_saver = AudioSaverHandler(stop_event=pipeline.states.stop_event)
+    raw_audio_saver.add_input_queue(pipeline.queues.recv_audio_chunks_queue)
+    raw_audio_saver.setup(
         save_dir=args.audio_save_dir,
         sample_rate=args.sample_rate,
         channels=args.channels
     )
-    handlers.append(audio_saver)
+    handlers.append(raw_audio_saver)
     
     # 3. 创建VAD处理器
     vad_handler = VADHandler(stop_event=pipeline.states.stop_event)
@@ -56,11 +66,23 @@ def create_handlers(pipeline: PipelineManager, args: argparse.Namespace) -> List
     vad_handler.setup(
         should_listen=pipeline.states.should_listen,
         sample_rate=args.sample_rate,
-        chunk_size=args.chunk_size,
-        min_speech_ms=args.min_speech_ms
+        chunk_size=1000,  # 1秒
+        min_duration=0.5,  # 0.5秒
+        max_duration=float('inf'),  # 无限制
+        threshold=0.3  # VAD阈值
     )
     pipeline.states.should_listen.set()
     handlers.append(vad_handler)
+    
+    # 4. 创建VAD音频保存处理器
+    vad_audio_saver = AudioSaverHandler(stop_event=pipeline.states.stop_event)
+    vad_audio_saver.add_input_queue(pipeline.queues.spoken_prompt_queue)
+    vad_audio_saver.setup(
+        save_dir=os.path.join(args.audio_save_dir, "vad"),  # 在主音频目录下创建vad子目录
+        sample_rate=args.sample_rate,
+        channels=args.channels
+    )
+    handlers.append(vad_audio_saver)
     
     return handlers
 
