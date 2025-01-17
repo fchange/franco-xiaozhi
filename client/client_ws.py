@@ -7,7 +7,8 @@ from pathlib import Path
 from threading import Thread, Event
 from queue import Queue
 from typing import Optional
-
+import soundfile  # 添加 soundfile 库的导入
+import scipy.signal  # 添加 scipy.signal 库的导入
 
 class AudioClient:
     """音频客户端，用于发送音频数据到服务器"""
@@ -17,6 +18,7 @@ class AudioClient:
         self.port = port
         self.stop_event = Event()
         self.audio_queue = Queue()
+        self.EXPECTED_SAMPLE_RATE = 16000  # 添加 EXPECTED_SAMPLE_RATE 常量
         
     def connect(self) -> None:
         """连接到服务器"""
@@ -43,6 +45,16 @@ class AudioClient:
             chunk_size: 每次发送的数据大小
         """
         try:
+            # 使用 soundfile 读取音频文件
+            audio_data, sample_rate = soundfile.read(audio_file)
+            if sample_rate != self.EXPECTED_SAMPLE_RATE:
+                logging.info(f"Resampling audio file from {sample_rate} to {self.EXPECTED_SAMPLE_RATE} Hz")
+                num_samples = int(len(audio_data) * self.EXPECTED_SAMPLE_RATE / sample_rate)
+                audio_data = scipy.signal.resample(audio_data, num_samples)
+                sample_rate = self.EXPECTED_SAMPLE_RATE
+                # self.save_resampled_audio(audio_data, sample_rate, audio_file)
+            # 将音频数据转换为字节并发送
+            audio_bytes = audio_data.tobytes()
             with open(audio_file, 'rb') as f:
                 while True:
                     chunk = f.read(chunk_size)
@@ -67,6 +79,18 @@ class AudioClient:
             logging.error(f"Error sending audio data: {e}")
             raise
 
+    def save_resampled_audio(self, audio_data, sample_rate, original_audio_file):
+        """
+        保存重采样后的音频文件
+        
+        Args:
+            audio_data: 重采样后的音频数据
+            sample_rate: 重采样后的采样率
+            original_audio_file: 原始音频文件路径
+        """
+        resampled_audio_file = f"{Path(original_audio_file).stem}_resampled.wav"
+        soundfile.write(resampled_audio_file, audio_data, sample_rate)
+        logging.info(f"Saved resampled audio file: {resampled_audio_file}")
 
 def main():
     """主函数"""
@@ -109,4 +133,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()

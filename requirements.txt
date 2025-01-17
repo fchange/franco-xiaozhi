@@ -4,3 +4,4 @@ soundfile>=0.12.1
 modelscope[framework]
 torchaudio
 torch
+librosa

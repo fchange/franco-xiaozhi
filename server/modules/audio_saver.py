@@ -1,43 +1,35 @@
-import os
-import wave
+from asyncio import Event
 from datetime import datetime
 from pathlib import Path
-from typing import Generator, Any
+from typing import Generator
+
+import soundfile
+from numpy import ndarray
 
 from server.modules.base_handler import BaseHandler
 
 
 class AudioSaverHandler(BaseHandler):
     """音频保存处理器"""
-    
+
+    def __init__(self, stop_event: Event):
+        super().__init__(stop_event)
+        self.channels = None
+        self.sample_rate = None
+        self.save_dir = None
+
     def setup(self, save_dir: str = "audio_saves", sample_rate: int = 16000, channels: int = 1):
         self.save_dir = Path(save_dir)
         self.save_dir.mkdir(parents=True, exist_ok=True)
         self.sample_rate = sample_rate
         self.channels = channels
-        self.wave_file = None
         
-    def _create_new_wave_file(self) -> None:
+    def new_file(self) -> str:
         """创建新的WAV文件"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"audio_{timestamp}.wav"
-        self.current_file = self.save_dir / filename
-        
-        self.wave_file = wave.open(str(self.current_file), 'wb')
-        self.wave_file.setnchannels(self.channels)
-        self.wave_file.setsampwidth(2)  # 16-bit audio
-        self.wave_file.setframerate(self.sample_rate)
+        filename = f"audio_{timestamp}.ogg"
+        return self.save_dir / filename
 
-    def process(self, audio_chunk: bytes) -> Generator[bytes, None, None]:
-        if self.wave_file is None:
-            self._create_new_wave_file()
-            
-        if audio_chunk and len(audio_chunk) > 0:
-            self.wave_file.writeframes(audio_chunk)
-            yield audio_chunk
-
-    def cleanup(self) -> None:
-        """清理资源，关闭WAV文件"""
-        if self.wave_file is not None:
-            self.wave_file.close()
-            self.wave_file = None 
+    def process(self, audio_chunk) -> Generator[ndarray, None, None]:
+        soundfile.write(self.new_file(), audio_chunk, self.sample_rate, format='ogg', subtype='OPUS')
+        yield audio_chunk
