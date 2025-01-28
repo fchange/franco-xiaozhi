@@ -5,3 +5,6 @@ modelscope[framework]
 torchaudio
 torch
 librosa
+openai
+pyaudio
+dashscope

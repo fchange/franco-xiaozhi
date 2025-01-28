@@ -32,7 +32,6 @@ class VADHandler(BaseHandler):
         self.reply_silence_duration = 100  # Reply duration
         self.truncate_silence_duration = 1440  # Truncate duration
         self.max_audio_duration = 120000  # 120 seconds
-        self.vad_last_pos_ms = 0
 
         # 初始化VAD模型
         self.model = AutoModel(
@@ -42,11 +41,10 @@ class VADHandler(BaseHandler):
             disable_update=True,
             max_end_silence_time=0  # 禁用内部的静音检测
         )
-        logging.info("FSMN-VAD model loaded")
         self.reset()
+        logging.info("FSMN-VAD model loaded")
 
     def reset(self):
-        self.frame_buffer = b''
         self.audio_buffer = np.array([], dtype=np.float32)
         self.audio_process_last_pos_ms = 0
         self.vad_cache = {}
@@ -57,7 +55,6 @@ class VADHandler(BaseHandler):
         if self.audio_process_last_pos_ms < self.truncate_silence_duration:
             return
         self.audio_buffer = self.audio_buffer[-self.chunk_size_ms * 16:] # Keep the last chunk
-        self.frame_buffer = self.frame_buffer[-self.chunk_size_ms * 16:]
 
         self.audio_process_last_pos_ms = 0 # The last chunk will be processed again
         self.vad_cache = {}
@@ -73,13 +70,11 @@ class VADHandler(BaseHandler):
 
     def process(self, frame: bytes) -> Generator[np.ndarray, None, None]:
         if not self.should_listen.is_set():
-            logger.debug("VAD is not listening")
             return
 
         # 将音频数据转换为float32格式
         frame_fp32 = np.frombuffer(frame, dtype=np.int16).astype(np.float32) / 32768
         self.audio_buffer = np.concatenate([self.audio_buffer, frame_fp32])
-        self.frame_buffer = self.frame_buffer + frame
         current_duration = self.audio_buffer.shape[0] / 16
 
         # 如果累积的音频数据足够长，进行VAD处理
@@ -98,6 +93,7 @@ class VADHandler(BaseHandler):
                 chunk_size=self.chunk_size_ms
             )
 
+            # 未检测到音频
             if len(res[0]['value']) <= 0:
                 if len(self.vad_cached_segments) == 0:
                     self.truncate()
@@ -105,7 +101,7 @@ class VADHandler(BaseHandler):
             else:
                 self.vad_cached_segments.extend(res[0]['value'])
                 self.vad_last_pos_ms = self.vad_cached_segments[-1][1]
-                logging.info(f'VAD segments: {self.vad_cached_segments}')
+                logging.debug(f'VAD segments: {self.vad_cached_segments}')
 
                 # still going
                 if self.vad_last_pos_ms == -1:
@@ -113,13 +109,15 @@ class VADHandler(BaseHandler):
 
                 silence_duration = self.get_silence_duration()
                 if silence_duration >= self.reply_silence_duration:
-                    logger.info(f'Silence detected (duration: {silence_duration:.2f}ms)')
+                    logger.info(f'Silence detected (duration: {silence_duration:.2f}ms), {self.audio_buffer.shape[0] / 16:.2f}ms of audio data')
                     yield self.audio_buffer
+                    self.cleanup()
                     break
 
                 if current_duration >= self.max_audio_duration:
                     logger.info(f'Max audio duration reached (duration: {current_duration:.2f}ms)')
                     yield self.audio_buffer
+                    self.cleanup()
                     break
 
         # logging.info(f'Processed {current_duration:.2f}ms of audio data')
@@ -127,15 +125,15 @@ class VADHandler(BaseHandler):
     def cleanup(self) -> None:
         """清理资源"""
         self.cache = {}
-        self.accumulated_audio = np.array([], dtype=np.float32)
         self.is_speaking = False
         self.current_speech = []
         self.speech_start_idx = 0
+        self.vad_cached_segments = []
 
 if __name__ == '__main__':
 
     # 设置日志级别为DEBUG以查看更详细的信息
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s', stream=sys.stdout)
+    # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s', stream=sys.stdout)
 
     chunk_size = 200 #ms
 

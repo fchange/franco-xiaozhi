@@ -1,13 +1,17 @@
 import logging
 
+from server.modules.llm_handler import LLMHandler
+from server.modules.tts_handler import TTSHandler
+
 # 设置日志配置
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    # level=logging.INFO,
+    format='%(asctime)s|%(name)s|%(levelname)s - %(message)s',
     encoding='utf-8',
     handlers=[
         logging.StreamHandler(),  # 输出到控制台
-        logging.FileHandler('server.log')  # 同时保存到文件
+        # logging.FileHandler('server.log')  # 同时保存到文件
     ]
 )
 
@@ -25,7 +29,7 @@ import argparse
 from typing import Optional, List
 
 from utils.pipeline_manager import PipelineManager
-from server.modules.audio_saver import AudioSaverHandler
+from server.modules.audio_saver_handler import AudioSaverHandler
 from server.modules.vad_handler import VADHandler
 from server.modules.asr_handler import AsrHandler
 
@@ -60,14 +64,14 @@ def create_handlers(pipeline: PipelineManager, args: argparse.Namespace) -> List
     handlers.append(vad_handler)
 
     # 3. 创建原始音频保存处理器
-    raw_audio_saver = AudioSaverHandler(stop_event=pipeline.states.stop_event)
-    raw_audio_saver.add_input_queue(pipeline.queues.spoken_prompt_queue)
-    raw_audio_saver.setup(
-        save_dir=args.audio_save_dir,
-        sample_rate=args.sample_rate,
-        channels=args.channels
-    )
-    handlers.append(raw_audio_saver)
+    # raw_audio_saver = AudioSaverHandler(stop_event=pipeline.states.stop_event)
+    # raw_audio_saver.add_input_queue(pipeline.queues.spoken_prompt_queue)
+    # raw_audio_saver.setup(
+    #     save_dir=args.audio_save_dir,
+    #     sample_rate=args.sample_rate,
+    #     channels=args.channels
+    # )
+    # handlers.append(raw_audio_saver)
     
     # 4. asr
     asr_handler = AsrHandler(stop_event=pipeline.states.stop_event)
@@ -75,7 +79,35 @@ def create_handlers(pipeline: PipelineManager, args: argparse.Namespace) -> List
     asr_handler.add_output_queue(pipeline.queues.text_prompt_queue)
     asr_handler.setup()
     handlers.append(asr_handler)
-    
+
+    # 5. llm
+    llm_handler = LLMHandler(stop_event=pipeline.states.stop_event)
+    llm_handler.add_input_queue(pipeline.queues.text_prompt_queue)
+    llm_handler.add_output_queue(pipeline.queues.lm_response_queue)
+    llm_handler.setup(
+        model_name="TODO",
+        base_url="TODO",
+        api_key="TODO",
+        stream=True,
+    )
+    handlers.append(llm_handler)
+
+    # 6. tts
+    tts_handler = TTSHandler(stop_event=pipeline.states.stop_event)
+    tts_handler.add_input_queue(pipeline.queues.lm_response_queue)
+    tts_handler.add_output_queue(pipeline.queues.send_audio_chunks_queue)
+    tts_handler.setup()
+    handlers.append(tts_handler)
+
+    # 7. 创建Socket发送器
+    sender = SocketSender(
+        host=args.send_host,
+        port=args.send_port,
+        queue=pipeline.queues.send_audio_chunks_queue
+    )
+    handlers.append(sender)
+
+
     return handlers
 
 
@@ -161,15 +193,10 @@ def main():
     # 服务器配置
     parser.add_argument('--host', default='localhost', help='服务器地址')
     parser.add_argument('--port', type=int, default=65432, help='服务器端口')
-    
+    parser.add_argument('--send-host', default='localhost', help='发送音频数据的服务器地址')
+    parser.add_argument('--send-port', type=int, default=65433, help='发送音频数据的服务器端口')
     # 音频配置
     parser.add_argument('--audio-save-dir', default='audio_saves', help='音频保存目录')
-    parser.add_argument('--sample-rate', type=int, default=16000, help='音频采样率')
-    parser.add_argument('--channels', type=int, default=1, help='音频声道数')
-    
-    # VAD配置
-    parser.add_argument('--chunk-size', type=int, default=200, help='VAD处理的音频块大小(ms)')
-    parser.add_argument('--min-speech-ms', type=int, default=300, help='最小语音时长(ms)')
     
     args = parser.parse_args()
     

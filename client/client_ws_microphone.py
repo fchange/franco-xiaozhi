@@ -6,13 +6,16 @@ import threading
 from queue import Queue
 from threading import Event
 
+import pyaudio
+
 
 class AudioClient:
     """音频客户端，用于发送音频数据到服务器"""
     
-    def __init__(self, host: str = "localhost", port: int = 65432):
+    def __init__(self, host: str = "localhost", port: int = 65432, receiving_port: int = 65433):
         self.host = host
         self.port = port
+        self.receiving_port = receiving_port
         self.stop_event = Event()
         self.audio_queue = Queue()
         self.EXPECTED_SAMPLE_RATE = 16000  # 添加 EXPECTED_SAMPLE_RATE 常量
@@ -20,9 +23,11 @@ class AudioClient:
     def connect(self) -> None:
         """连接到服务器"""
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.receiving_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             self.socket.connect((self.host, self.port))
-            logging.info(f"Connected to server at {self.host}:{self.port}")
+            self.receiving_socket.connect((self.host, self.receiving_port))
+            logging.info(f"Connected to server at {self.host}:{self.port} AND {self.receiving_port}")
         except Exception as e:
             logging.error(f"Failed to connect to server: {e}")
             raise
@@ -31,6 +36,7 @@ class AudioClient:
         """断开与服务器的连接"""
         if hasattr(self, 'socket'):
             self.socket.close()
+            self.receiving_socket.close()
             logging.info("Disconnected from server")
             
     def send_audio_data(self, audio_data: bytes) -> None:
@@ -46,7 +52,7 @@ class AudioClient:
             logging.error(f"Error sending audio data: {e}")
             raise
 
-    def macphone_start(self):
+    def microphone_start(self):
         import sounddevice as sd
         def callback(indata, frames: int, time, status):
             if status:
@@ -66,6 +72,13 @@ class AudioClient:
         )
         # 启动一个线程来处理音频流
         threading.Thread(target=send_stream.start).start()
+
+    def player(self):
+        self._player = pyaudio.PyAudio()
+        self._stream = self._player.open(
+            format=pyaudio.paInt16, channels=1, rate=22050, output=True
+        )
+        self.receiving_socket.on
 
 
 def main():
@@ -88,9 +101,12 @@ def main():
     try:
         # 连接服务器
         client.connect()
+
+        # 播放音频
+        client.player()
         
         # 麦克风
-        client.macphone_start()
+        client.microphone_start()
 
         input("按回车键停止客户端...\n")
             
