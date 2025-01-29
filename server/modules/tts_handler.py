@@ -8,9 +8,6 @@ import dashscope
 from dashscope.audio.tts_v2 import *
 from server.modules.base_handler import BaseHandler
 
-dashscope.api_key = "TODO"
-
-
 class TTSMessageType(Enum):
     START = 1
     END = 2
@@ -29,13 +26,15 @@ class TTSMessage:
 class TTSHandler(BaseHandler):
     def __init__(self, stop_event: Event):
         super().__init__(stop_event, is_async=True)
-        self.model = "cosyvoice-v1"
-        self.voice = "longxiang"
         self.synthesizer = None
         self._player = None
         self._stream = None
 
-    def setup(self):
+    def setup(self, api_key, model = "cosyvoice-v1", voice = "longxiang"):
+        dashscope.api_key = api_key
+
+        self.model = model
+        self.voice = voice
         self._player = pyaudio.PyAudio()
         self._stream = self._player.open(
             format=pyaudio.paInt16, channels=1, rate=16000, output=True
