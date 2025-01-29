@@ -38,19 +38,6 @@ class AudioClient:
             self.socket.close()
             self.receiving_socket.close()
             logging.info("Disconnected from server")
-            
-    def send_audio_data(self, audio_data: bytes) -> None:
-        """
-        发送音频数据到服务器
-        
-        Args:
-            audio_data: 音频数据字节
-        """
-        try:
-            self.socket.sendall(audio_data)
-        except Exception as e:
-            logging.error(f"Error sending audio data: {e}")
-            raise
 
     def microphone_start(self):
         import sounddevice as sd
@@ -78,7 +65,14 @@ class AudioClient:
         self._stream = self._player.open(
             format=pyaudio.paInt16, channels=1, rate=22050, output=True
         )
-        self.receiving_socket.on
+        while True:
+            try:
+                response = self.client_socket.recv()
+                self._stream.write(response)
+            except Exception as e:
+                print(f"Error receiving message: {e}")
+                break
+
 
 
 def main():
@@ -103,7 +97,7 @@ def main():
         client.connect()
 
         # 播放音频
-        client.player()
+        threading.Thread(target=client.player, daemon=True).start()
         
         # 麦克风
         client.microphone_start()

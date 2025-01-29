@@ -1,37 +1,15 @@
-import logging
-
-from server.modules.llm_handler import LLMHandler
-from server.modules.tts_handler import TTSHandler
-
-# 设置日志配置
-logging.basicConfig(
-    level=logging.DEBUG,
-    # level=logging.INFO,
-    format='%(asctime)s|%(name)s|%(levelname)s - %(message)s',
-    encoding='utf-8',
-    handlers=[
-        logging.StreamHandler(),  # 输出到控制台
-        # logging.FileHandler('server.log')  # 同时保存到文件
-    ]
-)
-
-import os
-import sys
-
-# 将项目根目录添加到Python路径
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(ROOT_DIR)
-
-import socket
-from threading import Event
-from queue import Queue
 import argparse
+import logging
+import socket
+from queue import Queue
+from threading import Event
 from typing import Optional, List
 
-from utils.pipeline_manager import PipelineManager
-from server.modules.audio_saver_handler import AudioSaverHandler
-from server.modules.vad_handler import VADHandler
 from server.modules.asr_handler import AsrHandler
+from server.modules.llm_handler import LLMHandler
+from server.modules.tts_handler import TTSHandler
+from server.modules.vad_handler import VADHandler
+from utils.pipeline_manager import PipelineManager
 
 
 def create_handlers(pipeline: PipelineManager, args: argparse.Namespace) -> List:
@@ -185,7 +163,12 @@ def main():
     # 设置日志级别为DEBUG以查看更详细的信息
     logging.basicConfig(
         level=logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        # level=logging.INFO,
+        format='%(asctime)s|%(name)s|%(levelname)s - %(message)s',
+        encoding='utf-8',
+        handlers=[
+            logging.StreamHandler(),  # 输出到控制台
+        ]
     )
     
     # 解析命令行参数
