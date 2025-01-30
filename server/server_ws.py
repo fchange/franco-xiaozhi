@@ -8,6 +8,7 @@ from typing import Optional, List
 from server.modules.asr_handler import AsrHandler
 from server.modules.llm_handler import LLMHandler
 from server.modules.tts_handler import TTSHandler
+from server.modules.tts_siliconflow_handler import TTSSiliconflowHandler
 from server.modules.vad_handler import VADHandler
 from utils.pipeline_manager import PipelineManager
 
@@ -29,6 +30,7 @@ def create_handlers(pipeline: PipelineManager, args: argparse.Namespace) -> List
     handlers.append(SocketHandler(
         host=args.host,
         port=args.port,
+        should_listen=pipeline.states.should_listen,
         queue_in=pipeline.queues.recv_audio_chunks_queue,
         queue_out=pipeline.queues.send_audio_chunks_queue
     ))
@@ -71,11 +73,13 @@ def create_handlers(pipeline: PipelineManager, args: argparse.Namespace) -> List
     handlers.append(llm_handler)
 
     # 6. tts
-    tts_handler = TTSHandler(stop_event=pipeline.states.stop_event)
+    # tts_handler = TTSHandler(stop_event=pipeline.states.stop_event)
+    tts_handler = TTSSiliconflowHandler(stop_event=pipeline.states.stop_event)
     tts_handler.add_input_queue(pipeline.queues.lm_response_queue)
     tts_handler.add_output_queue(pipeline.queues.send_audio_chunks_queue)
     tts_handler.setup(
         api_key=args.tts_api_key,
+        should_listen=pipeline.states.should_listen,
     )
     handlers.append(tts_handler)
 
@@ -85,10 +89,11 @@ def create_handlers(pipeline: PipelineManager, args: argparse.Namespace) -> List
 class SocketHandler:
     """Socket处理器，用于接收音频数据和播放音频数据"""
 
-    def __init__(self, host: str, port: int, queue_in: Queue, queue_out: Queue):
+    def __init__(self, host: str, port: int, should_listen:Event, queue_in: Queue, queue_out: Queue):
         self.host = host
         self.port = port
         self.socket = None
+        self.should_listen = should_listen
         self.queue_in = queue_in
         self.queue_out = queue_out
         self.stop_event = Event()
@@ -120,6 +125,7 @@ class SocketHandler:
         logging.info("SocketHandler stopped.")
 
     def handle_receiving(self, conn: socket.socket):
+        self.should_listen.set()
         """处理接收数据并放入queue_in"""
         with conn:
             conn.settimeout(1)
@@ -145,7 +151,7 @@ class SocketHandler:
                     data_to_send = self.queue_out.get(timeout=1)
                     if data_to_send:
                         conn.sendall(data_to_send)
-                        logging.debug(f"Sent {len(data_to_send)} bytes from queue_out.")
+                        # logging.debug(f"Sent {len(data_to_send)} bytes from queue_out.")
                 except Empty:
                     pass
                 except Exception as e:

@@ -59,7 +59,7 @@ class AudioClient:
 
     def play(self):
         self._player = pyaudio.PyAudio()
-        self._stream = self._player.open(format=pyaudio.paInt16, channels=1, rate=22050, output=True)
+        self._stream = self._player.open(format=pyaudio.paInt16, channels=1, rate=16000, output=True)
 
         def play_audio():
             while True:

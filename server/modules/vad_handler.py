@@ -110,12 +110,14 @@ class VADHandler(BaseHandler):
                 silence_duration = self.get_silence_duration()
                 if silence_duration >= self.reply_silence_duration:
                     logger.info(f'Silence detected (duration: {silence_duration:.2f}ms), {self.audio_buffer.shape[0] / 16:.2f}ms of audio data')
+                    self.should_listen.clear()
                     yield self.audio_buffer
                     self.cleanup()
                     break
 
                 if current_duration >= self.max_audio_duration:
                     logger.info(f'Max audio duration reached (duration: {current_duration:.2f}ms)')
+                    self.should_listen.clear()
                     yield self.audio_buffer
                     self.cleanup()
                     break
@@ -147,7 +149,7 @@ if __name__ == '__main__':
     # 读取测试音频文件
     import wave
 
-    wav_file_url = "C:\\Users\\17870\\PycharmProjects\\franco-xiaozhi\\天龙八部0107.wav"
+    wav_file_url = "天龙八部0107.wav"
     wav_file = wave.open(wav_file_url, "rb")
     if wav_file.getsampwidth() != 2 or wav_file.getnchannels() != 1 or wav_file.getframerate() != 16000:
         raise ValueError("WAV file must be 16kHz, 16-bit, mono")

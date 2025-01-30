@@ -85,8 +85,6 @@ class PipelineManager:
             stop_event=Event(),
             should_listen=Event()
         )
-        # 默认开启监听
-        self.states.should_listen.set()
         
         # 初始化线程管理器
         self.thread_manager = None

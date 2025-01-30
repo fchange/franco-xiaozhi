@@ -5,7 +5,9 @@ modelscope[framework]
 torchaudio
 torch
 librosa
-openai
-pyaudio
-dashscope
+openai~=1.60.2
+pyaudio~=0.2.14
+dashscope~=1.22.1
 sounddevice
+scipy~=1.15.1
+requests

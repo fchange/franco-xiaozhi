@@ -23,22 +23,19 @@ class TTSMessage:
         self.type = type
         self.text = text
 
+# 对接文档
+# https://help.aliyun.com/zh/model-studio/developer-reference/cosyvoice-large-model-for-speech-synthesis/
 class TTSHandler(BaseHandler):
     def __init__(self, stop_event: Event):
         super().__init__(stop_event, is_async=True)
         self.synthesizer = None
-        self._player = None
-        self._stream = None
 
-    def setup(self, api_key, model = "cosyvoice-v1", voice = "longxiang"):
+    def setup(self, api_key, should_listen:Event, model = "cosyvoice-v1", voice = "longxiang"):
         dashscope.api_key = api_key
+        self.should_listen = should_listen
 
         self.model = model
         self.voice = voice
-        self._player = pyaudio.PyAudio()
-        self._stream = self._player.open(
-            format=pyaudio.paInt16, channels=1, rate=16000, output=True
-        )
 
 
     def async_process(self, message:TTSMessage):
@@ -46,20 +43,13 @@ class TTSHandler(BaseHandler):
             self.synthesizer = SpeechSynthesizer(
                 model=self.model,
                 voice=self.voice,
-                format=AudioFormat.PCM_22050HZ_MONO_16BIT,
+                format=AudioFormat.PCM_16000HZ_MONO_16BIT,
                 callback=Callback(self),
             )
         elif message.type == TTSMessageType.TXT:
             self.synthesizer.streaming_call(message.text)
         elif message.type == TTSMessageType.END:
             self.synthesizer.streaming_complete()
-
-    def cleanup(self):
-        if self._stream is not None:
-            self._stream.stop_stream()
-            self._stream.close()
-        if self._player is not None:
-            self._player.terminate()
 
 class Callback(ResultCallback):
     handler = None
@@ -69,6 +59,7 @@ class Callback(ResultCallback):
 
     def on_complete(self):
         logging.debug("speech synthesis task complete successfully.")
+        self.handler.should_listen.set()
 
     def on_error(self, message: str):
         logging.debug(f"speech synthesis task failed, {message}")
